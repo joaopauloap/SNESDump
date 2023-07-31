@@ -1,11 +1,11 @@
-#include<SPI.h>
+#include <SPI.h>
 
+const int write_en = A0;    //WRITE ENABLE WE PIN
+const int snesReadPin = A1;   //Cart pin 23 - aka /RD, CE - Address bus read
+const int snesWritePin = A2;  //Cart pin 54 - aka /WR - Address bus write
+const int snesCartPin = A3;   //Cart pin 49 - aka /CS, OE, /ROMSEL, /Cart - Goes low when reading ROM
+const int snesResetPin = A4;  //Cart pin 26 - SNES reset pin. Goes high when reading cart
 const int AddressLatchPin = 10;
-
-const int snesReadPin = A1; //Cart pin 23 - aka /RD - Address bus read
-const int snesWritePin = A2; //Cart pin 54 - aka /WR - Address bus write
-const int snesCartPin = A3; //Cart pin 49 - aka /CS, /ROMSEL, /Cart - Goes low when reading ROM
-const int snesResetPin = A4; //Cart pin 26 - SNES reset pin. Goes high when reading cart
 
 typedef enum COMMANDS {
   CTRL,
@@ -15,14 +15,15 @@ typedef enum COMMANDS {
 
 void setup() {
   //begin serial
-  Serial.begin(2000000);
-  //erial.begin();
-  UBRR0 = 0; //max baud rate
-  bitSet(UCSR0A, U2X0); // change UART divider from 16 to 8  for double transmission speed
+  Serial.begin(115200);
+  //to increase speed, uncomment above lines if you arduino have ftdi
+  //Serial.begin(2000000);
+  //UBRR0 = 0; //max baud rate
+  bitSet(UCSR0A, U2X0);  // change UART divider from 16 to 8  for double transmission speed
 
   //begin spi
   SPI.begin();
-  SPI.setClockDivider(SPI_CLOCK_DIV2); //8MHz
+  SPI.setClockDivider(SPI_CLOCK_DIV2);  //8MHz
 
   setDataBusDir(INPUT);
 
@@ -31,7 +32,9 @@ void setup() {
   pinMode(snesReadPin, OUTPUT);
   pinMode(snesWritePin, OUTPUT);
   pinMode(snesResetPin, OUTPUT);
-
+  
+  digitalWrite(write_en, HIGH);  //pullup interno em write_en
+  pinMode(write_en, OUTPUT);     //saída para write_en
   //read the rom header
   //readHeader();
 
@@ -41,81 +44,82 @@ void setup() {
 
 void loop() {
   int incomingByte = serialReadBlocking();
-  switch(incomingByte) {
+  switch (incomingByte) {
     // set the cartridge control lines
     case CTRL:
-    {
-      setCtrlLines(serialReadBlocking());
-    }
-    break;
+      {
+        setCtrlLines(serialReadBlocking());
+      }
+      break;
 
     // read a section of data from the cart
     case READSECTION:
-    {
-      byte bank = serialReadBlocking();
-      byte startAddrHi = serialReadBlocking();
-      byte startAddrLow = serialReadBlocking();
-      byte endAddrHi = serialReadBlocking();
-      byte endAddrLow = serialReadBlocking();
+      {
+        byte bank = serialReadBlocking();
+        byte startAddrHi = serialReadBlocking();
+        byte startAddrLow = serialReadBlocking();
+        byte endAddrHi = serialReadBlocking();
+        byte endAddrLow = serialReadBlocking();
 
-      unsigned int addr = bytesToInt(startAddrHi, startAddrLow);
-      unsigned int endAddr = bytesToInt(endAddrHi, endAddrLow);
-      setDataBusDir(INPUT);
+        unsigned int addr = bytesToInt(startAddrHi, startAddrLow);
+        unsigned int endAddr = bytesToInt(endAddrHi, endAddrLow);
+        setDataBusDir(INPUT);
 
-      while (true) {
-        writeAddrBus(bank, addr);
-        Serial.write(readDataBus());
+        while (true) {
+          writeAddrBus(bank, addr);
+          Serial.write(readDataBus());
 
-        /* We must break out of the loop this way because of the potential case
+          /* We must break out of the loop this way because of the potential case
          * where addresses 0x0000 - 0xffff (inclusive) must be used. A standard
          * loop won't work because it will overflow the 16 bit unsigned int.
          */
-        if (addr == endAddr) {
-          break;
+          if (addr == endAddr) {
+            break;
+          }
+          addr++;
         }
-        addr++;
+        Serial.flush();
       }
-      Serial.flush();
-    }
-    break;
+      break;
 
     case WRITESECTION:
-    {
-      byte bank = serialReadBlocking();
-      byte startAddrHi = serialReadBlocking();
-      byte startAddrLow = serialReadBlocking();
-      byte endAddrHi = serialReadBlocking();
-      byte endAddrLow = serialReadBlocking();
+      {
+        byte bank = serialReadBlocking();
+        byte startAddrHi = serialReadBlocking();
+        byte startAddrLow = serialReadBlocking();
+        byte endAddrHi = serialReadBlocking();
+        byte endAddrLow = serialReadBlocking();
 
-      unsigned int addr = bytesToInt(startAddrHi, startAddrLow);
-      unsigned int endAddr = bytesToInt(endAddrHi, endAddrLow);
-      setDataBusDir(OUTPUT);
+        unsigned int addr = bytesToInt(startAddrHi, startAddrLow);
+        unsigned int endAddr = bytesToInt(endAddrHi, endAddrLow);
+        setDataBusDir(OUTPUT);
 
-      while (true) {
-        writeAddrBus(bank, addr);
-        writeDataBus(serialReadBlocking());
+        while (true) {
+          writeAddrBus(bank, addr);
+          writeDataBus(serialReadBlocking());
 
-        /* We must break out of the loop this way because of the potential case
+          /* We must break out of the loop this way because of the potential case
          * where addresses 0x0000 - 0xffff (inclusive) must be used. A standard
          * loop won't work because it will overflow the 16 bit unsigned int.
          */
-        if (addr == endAddr) {
-          break;
+          if (addr == endAddr) {
+            break;
+          }
+          addr++;
         }
-        addr++;
       }
-    }
-    break;
+      break;
   }
 }
 
 byte serialReadBlocking() {
-  while(Serial.available() == 0);
+  while (Serial.available() == 0)
+    ;
   return Serial.read();
 }
 
 unsigned int bytesToInt(byte hi, byte low) {
-  return ((unsigned int) hi << 8) | low;
+  return ((unsigned int)hi << 8) | low;
 }
 
 void setCtrlLines(byte s) {
@@ -130,15 +134,15 @@ void setCtrlLines(byte s) {
  * hardware spi for better performance
  */
 void writeAddrBus(byte bank, unsigned int addr) {
-  PORTB &= ~(B100); //Set AddressLatchPin low
-  SPI.transfer(bank); // shift out bank
-  SPI.transfer(addr >> 8); // shift out address upper byte
-  SPI.transfer(addr); // shift out address lower byte
-  PORTB |= (B100); //Set AddressLatchPin high
+  PORTB &= ~(B100);         //Set AddressLatchPin low
+  SPI.transfer(bank);       // shift out bank
+  SPI.transfer(addr >> 8);  // shift out address upper byte
+  SPI.transfer(addr);       // shift out address lower byte
+  PORTB |= (B100);          //Set AddressLatchPin high
 }
 
 //Read byte from data bus
-byte readDataBus(){
+byte readDataBus() {
   //Digital pins 2-7 (PIND) are connected to snes data lines 2-7.
   //Digital pins 8 and 9 (PINB) are connected to data lines 0 and 1 respectively
   //This line of code takes the data from pins 2-7 and from 8&9 and combines them into one byte.
@@ -153,12 +157,17 @@ void writeDataBus(byte data) {
   for (int i = 2; i < 8; i++) {
     digitalWrite(i, bitRead(data, i));
   }
+  
+  //write pulse
+  digitalWrite(write_en, LOW);
+  delayMicroseconds(1);
+  digitalWrite(write_en, HIGH);
 }
 
 //Set the data bus to output or input
 // false => INPUT, true => OUTPUT
 void setDataBusDir(bool dir) {
-  for (int p = 2; p <=9; p++){
+  for (int p = 2; p <= 9; p++) {
     pinMode(p, dir);
   }
 }

@@ -6,28 +6,29 @@ import serial
 import signal
 import struct
 import time
-import thread
+import _thread
+from serial.tools.list_ports import comports
 
 port = None
-baud = 2000000
+baud = 115200
 
 commands = {
-    'CTRL': chr(0),
-    'READSECTION': chr(1),
-    'WRITESECTION': chr(2)
+    'CTRL': bytes([0]),
+    'READSECTION': bytes([1]),
+    'WRITESECTION': bytes([2])
 }
 
 countries = [
-    'Japan (NTSC)','USA (NTSC)','Europe, Oceania, Asia (PAL)','Sweden (PAL)',
-    'Finland (PAL)','Denmark (PAL)','France (PAL)','Holland (PAL)',
-    'Spain (PAL)','Germany, Austria, Switz (PAL)','Italy (PAL)',
-    'Hong Kong, China (PAL)','Indonesia (PAL)','Korea (PAL)'
+    'Japan (NTSC)', 'USA (NTSC)', 'Europe, Oceania, Asia (PAL)', 'Sweden (PAL)',
+    'Finland (PAL)', 'Denmark (PAL)', 'France (PAL)', 'Holland (PAL)',
+    'Spain (PAL)', 'Germany, Austria, Switz (PAL)', 'Italy (PAL)',
+    'Hong Kong, China (PAL)', 'Indonesia (PAL)', 'Korea (PAL)'
 ]
 
 def main():
-    #get enviroment specific list of serial ports
+    # get environment-specific list of serial ports
     if sys.platform.startswith("win"):
-        ports = ["COM" + str(i + 1) for i in range(256)]
+        ports = [port.device for port in comports()]
     elif sys.platform.startswith("linux") or sys.platform.startswith("cygwin"):
         ports = glob.glob("/dev/ttyUSB*")
     elif sys.platform.startswith("darwin"):
@@ -35,67 +36,69 @@ def main():
     else:
         raise EnvironmentError("Unsupported platform")
 
-    #print the list of open ports to the screen
+    # print the list of open ports to the screen
+    print("Available serial ports:")
+
     num_ports = 0
     available_ports = []
     for port in ports:
         available_ports.append(port)
-        print " " + str(num_ports) + " - " + port
+        print(" " + str(num_ports) + " - " + port)
         num_ports += 1
 
-    #ask the user to select a serial port
+    # ask the user to select a serial port
     def get_port():
         try:
-            return int(raw_input("Please select a device: "))
-        except (ValueError):
+            return int(input("Please select the device number: "))
+        except ValueError:
             return -1
             pass
 
     port_selection = get_port()
     while port_selection < 0 or port_selection >= num_ports:
-        print "Invalid selection.",
+        print("Invalid selection.")
         port_selection = get_port()
 
-    #open the serial port
+    # open the serial port
     try:
         port = serial.Serial(available_ports[port_selection], baud)
     except (OSError, serial.SerialException):
         raise OSError("Could not open serial port")
 
-    # wait for device to signal it is ready.
+    # wait for the device to signal it is ready.
     port.read(1)
 
-    #print the options to the screen
+    # print the options to the screen
     def print_options():
-        print " i - Cart Info\n d - Dump ROM\n s - Dump SRAM\n w - Write SRAM\n h - Show this screen\n q - Quit"
+        print(" i - Cart Info\n d - Dump ROM\n s - Dump SRAM\n w - Write SRAM\n f - Write Flash EEPROM\n h - Show this screen\n q - Quit")
     print_options()
 
-    #the main loop
+    # the main loop
     quit = False
     while not quit:
-        action = raw_input("Please select an action: ").lower()
+        action = input("Please select an action: ").lower()
         if action == "i":
             header = get_header(port)
             if not verify_header(header):
-                print "Error reading cart!"
+                print("Error reading cart!")
                 continue
             print_cart_info(header)
 
         elif action == "d":
             header = get_header(port)
             if not verify_header(header):
-                print "Error reading cart!"
+                print("Error reading cart!")
                 continue
             print_cart_info(header)
 
-            file_name = raw_input("Please enter an output filename: ")
+            file_name = input("Please enter an output filename: ")
             output_file = open(file_name, "wb")
 
             hirom = (header[21] & 1)
             read_offset = 0x0 if hirom else 0x8000
             bank_size = 0x10000 if hirom else 0x8000
             rom_size = (1 << header[23]) * 1024
-            num_banks = rom_size/bank_size
+            num_banks = rom_size // bank_size
 
             set_ctrl_lines(port, False, True, False, True)
             total_bytes_read = 0
@@ -103,13 +106,13 @@ def main():
                 # send read section command
                 port.write(commands['READSECTION'])
                 # write bank to read from
-                port.write(chr(bank));
+                port.write(bytes([bank]))
                 # write start and end addresses
                 write_addr(port, read_offset)
                 write_addr(port, read_offset + bank_size - 1)
 
-                bytes_read = 0;
-                # read bank data in loop
+                bytes_read = 0
+                # read bank data in a loop
                 while bytes_read < bank_size:
                     num_to_read = port.inWaiting()
                     output_file.write(port.read(num_to_read))
@@ -119,24 +122,24 @@ def main():
                     sys.stdout.flush()
 
             output_file.close()
-            print "\n Done."
+            print("\n Done.")
 
         elif action == "s":
             header = get_header(port)
             if not verify_header(header):
-                print "Error reading cart!"
+                print("Error reading cart!")
                 continue
             hirom = (header[21] & 1)
             sram_size = header[24] * 2048
             print_cart_info(header)
             if sram_size == 0:
-                print "Error! Game has no SRAM!"
+                print("Error! Game has no SRAM!")
                 continue
 
-            file_name = raw_input("Please enter an output filename: ")
+            file_name = input("Please enter an output filename: ")
             output_file = open(file_name, "wb")
 
-            set_ctrl_lines(port, False, True, hirom, True)
+            set_ctrl_lines(port, True, False, hirom, True)
 
             # compute bank and addresses to write to
             if hirom:
@@ -149,13 +152,13 @@ def main():
 
             port.write(commands['READSECTION'])
             # write bank number
-            port.write(chr(bank))
+            port.write(bytes([bank]))
             # write start and end addresses
             write_addr(port, start_addr)
             write_addr(port, end_addr)
 
-            bytes_read = 0;
-            # read bank data in loop
+            bytes_read = 0
+            # read bank data in a loop
             while bytes_read < sram_size:
                 num_to_read = port.inWaiting()
                 output_file.write(port.read(num_to_read))
@@ -164,34 +167,34 @@ def main():
                 sys.stdout.flush()
 
             output_file.close()
-            print "\n Done."
+            print("\n Done.")
         elif action == "w":
             header = get_header(port)
             if not verify_header(header):
-                print "Error reading cart!"
+                print("Error reading cart!")
                 continue
             hirom = (header[21] & 1)
             sram_size = header[24] * 2048
             print_cart_info(header)
             if sram_size == 0:
-                print "Error! Game has no SRAM!"
+                print("Error! Game has no SRAM!")
                 continue
 
             def get_input_file():
                 try:
-                    file_name = raw_input("Please enter an input filename: ")
+                    file_name = input("Please enter an input filename: ")
                     return open(file_name, "rb")
                 except IOError:
                     return None
 
             input_file = get_input_file()
             while not input_file:
-                print "No such file."
+                print("No such file.")
                 continue
             file_size = os.fstat(input_file.fileno()).st_size
 
             if sram_size != file_size:
-                print "File size mismatch! File: {}, SRAM: {}".format(file_size, sram_size)
+                print("File size mismatch! File: {}, SRAM: {}".format(file_size, sram_size))
                 input_file.close()
                 continue
 
@@ -208,78 +211,125 @@ def main():
 
             port.write(commands['WRITESECTION'])
             # write bank number
-            port.write(chr(bank))
+            port.write(bytes([bank]))
             # write start and end addresses
             write_addr(port, start_addr)
             write_addr(port, end_addr)
 
-            bytes_written = 0;
+            bytes_written = 0
             while input_file.tell() < file_size:
                 this_byte = input_file.read(1)
                 port.write(this_byte)
                 bytes_written += 1
-                time.sleep(0.001) #add a small delay
+                time.sleep(0.001)  # add a small delay
                 sys.stdout.write("\r Writing SRAM {0}/{1} bytes".format(bytes_written, sram_size))
                 sys.stdout.flush()
 
             input_file.close()
-            print "\n Done."
+            print("\n Done.")
+        elif action == "f":
+
+            rom_type = 0 #lorom = 0 | hirom = 1
+            rom_size = 512
+            start_addr = 0x0 #lorom = 0x8000 |hirom = 0x00
+            end_addr = 0x7FFFF
+
+            def get_input_file():
+                try:
+                    file_name = input("Please enter an input filename: ")
+                    return open(file_name, "rb")
+                except IOError:
+                    return None
+
+            input_file = get_input_file()
+            while not input_file:
+                print("No such file.")
+                continue
+            file_size = os.fstat(input_file.fileno()).st_size
+
+
+            set_ctrl_lines(port, True, False, rom_type, True)
+
+            port.write(commands['WRITESECTION'])
+            port.write(bytes(0x00))
+
+            # write start and end addresses
+            write_addr(port, start_addr)
+            write_addr(port, end_addr)
+
+            bytes_written = 0
+            while input_file.tell() < file_size:
+                this_byte = input_file.read(1)
+                port.write(this_byte)
+                bytes_written += 1
+                time.sleep(0.001)  # add a small delay
+                sys.stdout.write("\r Writing ROM {0}/{1} bytes".format(bytes_written, rom_size))
+                sys.stdout.flush()
+
+            input_file.close()
+            print("\n Done.")
         elif action == "h":
             print_options()
         elif action == "q":
             quit = True
         else:
-            print "Invalid selection.",
+            print("Invalid selection.", )
 
     port.close()
+
 
 # read cart header in bank 0, 0xffc0 to 0xffde
 def get_header(port):
     set_ctrl_lines(port, False, True, False, True)
     port.write(commands['READSECTION'])
     # write bank number
-    port.write(chr(0))
-    #write start and end addresses
+    port.write(bytes([0]))
+    # write start and end addresses
     write_addr(port, 0xffc0)
     write_addr(port, 0xffdf)
     # read 32 byte header
     data = port.read(32)
-    return bytearray(data)
+    return (data)
+
 
 def verify_header(header):
     return not all(v == 0 for v in header)
 
+
 def print_cart_info(header):
-    title = str(header[:21]).strip()
-    layout =  "HiROM" if (header[21] & 1) else "LoROM"
+    title = str(header[:21].decode('utf-8')).strip()
+    layout = "HiROM" if (header[21] & 1) else "LoROM"
     rom_size = (1 << header[23])
-    #sram_size = (1 << header[24])
+    # sram_size = (1 << header[24])
     sram_size = header[24] * 2048
     country_code = header[25]
     country = countries[country_code] if country_code < len(countries) else str(country_code)
     version = header[27]
     checksum = (header[30] << 8) | header[31]
-    print " {}, {}, {} KB ROM, {} KB SRAM\n Country: {}, Version: {}, Checksum: 0x{:02X}".format(title, layout, rom_size, sram_size, country, version, checksum)
+    print("{}, {}, {} KB ROM, {} KB SRAM\nCountry: {}, Version: {}, Checksum: 0x{:02X}".format(title, layout, rom_size, sram_size, country, version, checksum))
+
 
 # write a 16 bit address to the serial port
 def write_addr(port, addr):
-    port.write(chr(addr >> 8 & 0xff))
-    port.write(chr(addr & 0xff))
+    port.write(bytes([(addr >> 8) & 0xff]))
+    port.write(bytes([addr & 0xff]))
+
 
 # set control line states (lines are active low)
 # 4 bits of information (most to least sig): read, write, cart select, reset
 def set_ctrl_lines(port, read, write, cart, reset):
-    value = (read << 3) | (write << 2) | (cart << 1) | (reset)
+    value = (read << 3) | (write << 2) | (cart << 1) | reset
     port.write(commands['CTRL'])
-    port.write(chr(value))
+    port.write(bytes([value]))
 
-#code to handle SIGINT
+
+# code to handle SIGINT
 def sigint_handler(signum, frame):
     signal.signal(signal.SIGINT, sigint)
     if port is not None:
         port.close()
     sys.exit(1)
-    signal.signal(signal.SIGINT, sigint_handler)
+
 
 if __name__ == '__main__':
     sigint = signal.getsignal(signal.SIGINT)
