@@ -8,14 +8,18 @@ import struct
 import time
 import _thread
 from serial.tools.list_ports import comports
+import tkinter as tk
+from tkinter import filedialog
 
 port = None
 baud = 115200
+SECTOR_SIZE = 256;
 
 commands = {
     'CTRL': bytes([0]),
     'READSECTION': bytes([1]),
-    'WRITESECTION': bytes([2])
+    'WRITESECTION': bytes([2]),
+    'FLASHSECTION': bytes([3]),
 }
 
 countries = [
@@ -67,6 +71,12 @@ def main():
 
     # wait for the device to signal it is ready.
     port.read(1)
+
+    def open_file():
+        root = tk.Tk()
+        root.withdraw()
+        file = filedialog.askopenfilename()
+        return file
 
     # print the options to the screen
     def print_options():
@@ -227,47 +237,37 @@ def main():
 
             input_file.close()
             print("\n Done.")
+
         elif action == "f":
 
-            rom_type = 0 #lorom = 0 | hirom = 1
-            rom_size = 512
-            start_addr = 0x0 #lorom = 0x8000 |hirom = 0x00
-            end_addr = 0x7FFFF
+            fileName = open_file()
+            try:
+                with open(fileName, 'rb') as file:
+                    
+                    fileSize = os.path.getsize(file.name)
+                    byteCount = 0
+                    bank_size = 32768 
+                    num_banks = fileSize//bank_size
 
-            def get_input_file():
-                try:
-                    file_name = input("Please enter an input filename: ")
-                    return open(file_name, "rb")
-                except IOError:
-                    return None
+                    port.write(commands['FLASHSECTION'])
+                    # port.write(num_banks)
 
-            input_file = get_input_file()
-            while not input_file:
-                print("No such file.")
-                continue
-            file_size = os.fstat(input_file.fileno()).st_size
+                    while byteCount<fileSize:
+                        block = file.read(SECTOR_SIZE)
+                        if not block:
+                            break
 
+                        port.write(block)
+                        
+                        port.readline().decode('utf-8')
+                        byteCount += SECTOR_SIZE
+                        sys.stdout.write(f"\rFlashing EEPROM: {byteCount} / {fileSize} bytes")
+                        sys.stdout.flush()
+                        print("\nDone.")
+            
+            except FileNotFoundError:
+                print(f"File '{fileName}' not found.")
 
-            set_ctrl_lines(port, True, False, rom_type, True)
-
-            port.write(commands['WRITESECTION'])
-            port.write(bytes(0x00))
-
-            # write start and end addresses
-            write_addr(port, start_addr)
-            write_addr(port, end_addr)
-
-            bytes_written = 0
-            while input_file.tell() < file_size:
-                this_byte = input_file.read(1)
-                port.write(this_byte)
-                bytes_written += 1
-                time.sleep(0.001)  # add a small delay
-                sys.stdout.write("\r Writing ROM {0}/{1} bytes".format(bytes_written, rom_size))
-                sys.stdout.flush()
-
-            input_file.close()
-            print("\n Done.")
         elif action == "h":
             print_options()
         elif action == "q":
