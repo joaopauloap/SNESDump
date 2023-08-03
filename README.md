@@ -6,7 +6,7 @@ Features:
 * Dump cart ROM
 * Backup cart SRAM
 * Restore cart SRAM
-* Write to flash EEPROMs (WIP by joaopauloap)
+* Write to flash EEPROMs (WIP by @joaopauloap)
 
 ## Game Compatibility
 Games that use certain enhancement chips are not compatible with this setup. Specifically, enhancement chips that sit between the console and the ROM/SRAM will not work. These chips, like the SA1, require a signal from the [Nintendo CIC](https://en.wikipedia.org/wiki/CIC_%28Nintendo%29) lockout chip to start up. No cart data can be accessed without the CIC signal. In the future, I may integrate the CIC chip in the design or emulate it in the firmware.
