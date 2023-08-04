@@ -3,7 +3,7 @@
 const int snesReadPin = A1;   //Cart pin 23 - aka /RD, CE - Address bus read
 const int snesWritePin = A2;  //Cart pin 54 - aka /WR - Address bus write
 const int snesCartPin = A3;   //Cart pin 49 - aka /CS, OE, /ROMSEL, /Cart - Goes low when reading ROM
-const int snesResetPin = A4;  //Cart pin 26 - SNES reset pin. Goes high when reading cart
+// const int snesResetPin = A4;  //Cart pin 26 - SNES reset pin. Goes high when reading cart
 const int AddressLatchPin = 10;
 
 const int pin_we = A0;  //Write Enable (#WE)
@@ -38,7 +38,7 @@ void setup() {
   pinMode(snesCartPin, OUTPUT);
   pinMode(snesReadPin, OUTPUT);
   pinMode(snesWritePin, OUTPUT);
-  pinMode(snesResetPin, OUTPUT);
+  // pinMode(snesResetPin, OUTPUT);
 
   digitalWrite(pin_we, HIGH);
   pinMode(pin_we, OUTPUT);
@@ -120,11 +120,11 @@ void loop() {
 
     case FLASHSECTION:
 
-      byte block[sector_size];
-      unsigned long receivedBytes = 0;
+      unsigned int receivedBytes = 0;
       unsigned int addr = 0;
+      byte block[sector_size];
       byte bank = 0;
-      int num_banks = 8;
+      byte num_banks = serialReadBlocking();
       
       while (true) {
         //wait for the block be filled according to the eeprom sector size
@@ -137,17 +137,17 @@ void loop() {
         receivedBytes = 0;
         addr += sector_size;
 
-        if (addr >= 0x8000) {
+        if (bank >= num_banks) {
+          Serial.println("");
+          break;
+        }
+
+        if (addr >= 0x8000) {   //lorom
           bank++;
           addr = 0;
         }
 
-        if (bank >= num_banks) {
-          Serial.println(addr);
-          break;
-        }
-
-        Serial.println(addr);
+        Serial.println("");
       }
 
       break;
@@ -168,7 +168,7 @@ void setCtrlLines(byte s) {
   digitalWrite(snesReadPin, s & 0x8);
   digitalWrite(snesWritePin, s & 0x4);
   digitalWrite(snesCartPin, s & 0x2);
-  digitalWrite(snesResetPin, s & 0x1);
+  // digitalWrite(snesResetPin, s & 0x1);
 }
 
 /* Write a value out to the address bus

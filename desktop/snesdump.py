@@ -11,6 +11,8 @@ from serial.tools.list_ports import comports
 import tkinter as tk
 from tkinter import filedialog
 
+#requeriments: pyserial==3.0.1
+
 port = None
 baud = 115200
 SECTOR_SIZE = 256;
@@ -245,12 +247,13 @@ def main():
                 with open(fileName, 'rb') as file:
                     
                     fileSize = os.path.getsize(file.name)
+                    filename = os.path.basename(file.name)
                     byteCount = 0
-                    bank_size = 32768 
+                    bank_size = 32768   #lorom
                     num_banks = fileSize//bank_size
 
                     port.write(commands['FLASHSECTION'])
-                    # port.write(num_banks)
+                    port.write(bytes([num_banks]))
 
                     while byteCount<fileSize:
                         block = file.read(SECTOR_SIZE)
@@ -258,12 +261,14 @@ def main():
                             break
 
                         port.write(block)
-                        
-                        port.readline().decode('utf-8')
+
+                        port.readline()
                         byteCount += SECTOR_SIZE
-                        sys.stdout.write(f"\rFlashing EEPROM: {byteCount} / {fileSize} bytes")
+                        time.sleep(0.001)  # add a small delay
+                        sys.stdout.write(f"\r Flashing {filename} in EEPROM: {byteCount} / {fileSize} bytes written...")
                         sys.stdout.flush()
-                        print("\nDone.")
+
+                    print("\nDone.")
             
             except FileNotFoundError:
                 print(f"File '{fileName}' not found.")
@@ -297,7 +302,7 @@ def verify_header(header):
 
 
 def print_cart_info(header):
-    title = str(header[:21].decode('utf-8')).strip()
+    title = str(header[:21].decode('utf-8',errors='ignore')).strip()
     layout = "HiROM" if (header[21] & 1) else "LoROM"
     rom_size = (1 << header[23])
     # sram_size = (1 << header[24])
