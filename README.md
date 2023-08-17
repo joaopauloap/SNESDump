@@ -1,5 +1,5 @@
 Obs: Este é um fork de https://github.com/cthill/SNESDump
-Nesta versão, implementei a funcionalidade de gravar a rom do jogo em eeprom flash, permitindo assim a gravação do jogo diretamente no cartucho através do dumper. As únicas modificações necessárias no esquema são duas:
+Nesta versão, implementei a funcionalidade de gravar a rom do jogo em eeprom flash, permitindo assim a gravação do jogo diretamente no cartucho através do dumper. As modificações necessárias são três:
 
 1 - No Dumper: Desconecte o pino A4 do RESET e Conecte o pino A0 no lugar dele, adicionando um resistor de pull up.
 
@@ -9,6 +9,7 @@ Nesta versão, implementei a funcionalidade de gravar a rom do jogo em eeprom fl
 
 ![image](https://github.com/joaopauloap/SNESDump/assets/36867356/c7865d70-3718-4d45-a8e9-e170854e5861)
 
+3 - Nos arquivos firmware.ino e snesdump.py: Ajuste o tamanho do setor (sector_size) de acordo com a sua eeprom flash. Geralmente é 256 ou 128 bytes. Consulte o datasheet do seu modelo.
 
 # SNES Dump
 Arduino powered interface for Super Nintendo Entertainment System game carts. A DIY alternative to the [retrode](http://www.retrode.org/).
